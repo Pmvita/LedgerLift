@@ -1,0 +1,11 @@
+aws_region         = "ca-central-1"
+project_name       = "ledgerlift"
+budget_email       = "you@example.com"
+monthly_budget_usd = "1"
+image_tag          = "latest"
+github_org         = "Pmvita"
+github_repo        = "LedgerLift"
+
+# If the account already has token.actions.githubusercontent.com:
+# create_github_oidc_provider = false
+# github_oidc_provider_arn    = "arn:aws:iam::ACCOUNT:oidc-provider/token.actions.githubusercontent.com"

@@ -6,7 +6,6 @@ coverage/
 !.env.example
 
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -15,6 +14,7 @@ crash.log
 override.tf
 override.tf.json
 *_override.tf
+# Keep .terraform.lock.hcl committed for reproducible providers.
 
 .DS_Store
 *.log

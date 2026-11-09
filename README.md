@@ -19,6 +19,8 @@ Demo for 1–2 hours, then `terraform destroy`. Near **$0** when torn down. No R
 
 **README = design.** [`TODO.md`](./TODO.md) **= build list.** Change a locked decision → bump the version in both files.
 
+**Honest status:** **code complete** (TypeScript API, Docker, Terraform, GitHub Actions, unit tests). **Live AWS** only after a short demo `terraform apply` + `destroy`. Local Docker/API works without AWS.
+
 ---
 
 ## Overview
@@ -63,6 +65,8 @@ This lab matches the core of Toronto Cloud Engineer job posts: build/run AWS, Ia
 - Region: `ca-central-1`
 - Out of scope: RDS, Aurora, NAT, EKS, custom domain, Redis, second environment, Control Tower
 
+**Deploy path (locked):** **B** — Terraform for infra once; Actions pushes the image tagged with `github.sha` and force-deploys ECS (registers a new task definition revision with the new image).
+
 ---
 
 ## Architecture
@@ -74,7 +78,7 @@ Developer
 GitHub Actions
    │  lint + test
    │  docker build → ECR
-   │  terraform apply / force new deployment
+   │  force new ECS deployment
    ▼
 Internet → Application Load Balancer
               │  /health
@@ -97,6 +101,22 @@ Internet → Application Load Balancer
 
 ---
 
+## API (quick)
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/` | Service JSON |
+| `GET` | `/health` | `{ "status": "ok" }` |
+| `GET/POST` | `/notes` | List / create |
+| `GET/DELETE` | `/notes/:id` | Get / delete |
+| `GET/POST` | `/expenses` | List / create (`amountCents`) |
+| `GET/DELETE` | `/expenses/:id` | Get / delete |
+| `POST` | `/attachments` | Small base64 object → S3 (needs `S3_BUCKET_NAME`) |
+
+Locally (no AWS): in-memory store when `DYNAMODB_TABLE` is unset. DynamoDB PK design: [`docs/data-model.md`](./docs/data-model.md).
+
+---
+
 ## Default cost
 
 | While demoing (1–2 hours) | After `terraform destroy` |
@@ -113,42 +133,66 @@ Never leave ALB + Fargate up overnight. Budget alarm at $1.
 | --- | --- |
 | ECS execution role | ECR pull; write to this log group |
 | ECS task role | DynamoDB table CRUD; S3 object R/W on this bucket; logs |
-| GitHub Actions (OIDC) | Push to this ECR repo; plan/apply this Terraform stack |
+| GitHub Actions (OIDC) | Push to this ECR repo; register task def; update this ECS service |
 
 No `*:*` on writes. No long-lived AWS keys in GitHub if OIDC is wired. S3 Block Public Access on. DynamoDB encryption at rest (AWS owned or CMK — default AWS owned is fine for the lab).
 
+`ecr:GetAuthorizationToken` is intentionally `*` — AWS does not allow scoping it (commented in Terraform).
+
 ---
 
-## Getting started (when TODO is done)
+## Getting started
 
 ```bash
-# 0) $1 budget + email in the account first
+# 0) $1 budget + email in the account first (or let Terraform create it)
 
-# 1) App locally (optional Compose for offline)
+# 1) App locally
 cd app
 npm ci
 npm test
 npm run dev
+# curl localhost:8080/health
 
-# 2) Image
+# 2) Image (Docker Desktop daemon must be running)
+cd ..
 docker build -t ledgerlift:local .
 docker run --rm -p 8080:8080 ledgerlift:local
 curl -s localhost:8080/health
 
-# 3) Infra
-cd ../infra
-cp terraform.tfvars.example terraform.tfvars
+# Optional compose (API only, in-memory)
+docker compose up --build
+
+# 3) Infra (demo window only)
+cd infra
+cp terraform.tfvars.example terraform.tfvars   # set budget_email
 terraform init
 terraform plan
 terraform apply
+# Confirm SNS email subscription once
+# Push an image (Actions) so ECS tasks become healthy if latest is missing
 
 # 4) Hit ALB URL, then tear down
 terraform destroy
+# Empty the S3 bucket first if destroy complains
 ```
+
+### GitHub Actions vars / secrets
+
+| Name | Where | Purpose |
+| --- | --- | --- |
+| `AWS_DEPLOY_ROLE_ARN` | secret | OIDC role ARN from `terraform output github_actions_role_arn` |
+| `AWS_REGION` | var (optional) | default `ca-central-1` |
+| `ECR_REPOSITORY` | var (optional) | default `ledgerlift-api` |
+| `ECS_CLUSTER` | var (optional) | default `ledgerlift` |
+| `ECS_SERVICE` | var (optional) | default `ledgerlift-api` |
+
+PR workflow: lint + test only. `main` / workflow_dispatch: lint/test → build/push → rolling ECS deploy.
+
+**First-apply note:** ECS expects an image at `ECR:latest` (or your `image_tag`). If the repo is empty, push once (Actions after setting the role secret, or `docker push`) then wait for the service to stabilize. If the account already has a GitHub OIDC provider, import it or remove `aws_iam_openid_connect_provider.github` from state and data-source the existing ARN.
 
 ---
 
-## Project structure (target)
+## Project structure
 
 ```text
 LedgerLift/
@@ -163,19 +207,24 @@ LedgerLift/
 ├── Dockerfile
 ├── docker-compose.yml          ← local only (optional)
 ├── infra/                      ← Terraform
-│   ├── main.tf
+│   ├── versions.tf
 │   ├── variables.tf
 │   ├── outputs.tf
-│   └── terraform.tfvars.example
+│   ├── terraform.tfvars.example
+│   ├── vpc.tf / alb.tf / ecs.tf / ecr.tf
+│   ├── dynamodb.tf / s3.tf / iam.tf / oidc.tf
+│   ├── alarms.tf / budget.tf
 ├── docs/
-│   └── RUNBOOK.md              ← alarm fired → what to check
+│   ├── RUNBOOK.md
+│   └── data-model.md
 └── .github/workflows/
+    ├── ci.yml
     └── deploy.yml
 ```
 
 ---
 
-## Resume line (when TODO is green)
+## Resume line (after demo + destroy)
 
 **LedgerLift — Containerized app on AWS (Terraform + CI/CD)** · 2026  
 ECS Fargate, ALB, DynamoDB, S3, VPC, IAM, ECR, GitHub Actions, CloudWatch  

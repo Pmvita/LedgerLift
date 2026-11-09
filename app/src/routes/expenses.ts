@@ -1,0 +1,54 @@
+import { Router } from "express";
+import { z } from "zod";
+import { AppError } from "../errors.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+import type { ItemService } from "../services/itemService.js";
+
+const createExpenseSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  amountCents: z.number().int().nonnegative(),
+  currency: z.string().trim().length(3).optional(),
+  s3Key: z.string().min(1).max(1024).optional(),
+});
+
+export const createExpensesRouter = (items: ItemService): Router => {
+  const router = Router();
+
+  router.get(
+    "/",
+    asyncHandler(async (_req, res) => {
+      const expenses = await items.list("EXPENSE");
+      res.status(200).json({ items: expenses });
+    }),
+  );
+
+  router.post(
+    "/",
+    asyncHandler(async (req, res) => {
+      const parsed = createExpenseSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AppError(400, "VALIDATION_ERROR", parsed.error.issues[0]?.message ?? "invalid body");
+      }
+      const expense = await items.createExpense(parsed.data);
+      res.status(201).json(expense);
+    }),
+  );
+
+  router.get(
+    "/:id",
+    asyncHandler(async (req, res) => {
+      const expense = await items.get("EXPENSE", req.params.id ?? "");
+      res.status(200).json(expense);
+    }),
+  );
+
+  router.delete(
+    "/:id",
+    asyncHandler(async (req, res) => {
+      await items.delete("EXPENSE", req.params.id ?? "");
+      res.status(204).send();
+    }),
+  );
+
+  return router;
+};
