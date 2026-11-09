@@ -1,6 +1,11 @@
 node_modules/
 dist/
+build/
 coverage/
+.npm-cache/
+.cache/
+*.tsbuildinfo
+
 .env
 .env.*
 !.env.example
@@ -11,11 +16,16 @@ coverage/
 *.tfvars
 !*.tfvars.example
 crash.log
+crash.*.log
 override.tf
 override.tf.json
 *_override.tf
 # Keep .terraform.lock.hcl committed for reproducible providers.
 
 .DS_Store
+Thumbs.db
 *.log
 out.json
+*.pem
+.vscode/
+.idea/
